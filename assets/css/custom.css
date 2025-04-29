@@ -1,0 +1,46 @@
+/* Custom styles to fix sidebar issues */
+
+/* Fix sidebar position */
+#sidebar {
+    position: fixed;
+    height: 100%;
+    min-height: 100vh;
+    width: 250px;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s;
+}
+
+/* Fix content area to not be covered by sidebar */
+#content {
+    width: calc(100% - 250px);
+    min-height: 100vh;
+    margin-left: 250px;
+    transition: all 0.3s;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    #sidebar {
+        margin-left: -250px;
+    }
+    
+    #sidebar.active {
+        margin-left: 0;
+    }
+    
+    #content {
+        width: 100%;
+        margin-left: 0;
+    }
+    
+    #content.active {
+        margin-left: 250px;
+    }
+}
+
+/* Add extra padding to ensure content isn't too close to the edge */
+.container-fluid {
+    padding: 20px;
+} 
