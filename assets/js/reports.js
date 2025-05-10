@@ -1,232 +1,263 @@
 document.addEventListener('DOMContentLoaded', function() {
-    initReportsPage();
-});
-
-function initReportsPage() {
-    // Initialize form handlers
-    initGenerateReportForm();
+    // Initialize date pickers
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    const reportPeriod = document.getElementById('reportPeriod');
     
-    // Load existing reports if on the reports list page
-    if (document.getElementById('reportsTableBody')) {
-        loadRecentReports();
+    if (startDate && endDate && reportPeriod) {
+        // Set default dates
+        const today = new Date();
+        startDate.value = today.toISOString().split('T')[0];
+        endDate.value = today.toISOString().split('T')[0];
+        
+        // Handle period change
+        reportPeriod.addEventListener('change', function() {
+            const today = new Date();
+            let start = new Date();
+            let end = new Date();
+            
+            switch(this.value) {
+                case 'daily':
+                    // Same day
+                    break;
+                case 'weekly':
+                    // Start of week to end of week
+                    start.setDate(today.getDate() - today.getDay());
+                    end.setDate(start.getDate() + 6);
+                    break;
+                case 'monthly':
+                    // Start of month to end of month
+                    start.setDate(1);
+                    end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+                    break;
+                case 'yearly':
+                    // Start of year to end of year
+                    start = new Date(today.getFullYear(), 0, 1);
+                    end = new Date(today.getFullYear(), 11, 31);
+                    break;
+                case 'custom':
+                    // Don't set dates for custom range
+                    return;
+            }
+            
+            startDate.value = start.toISOString().split('T')[0];
+            endDate.value = end.toISOString().split('T')[0];
+        });
     }
     
-    // Setup dependent dropdowns
-    initDependentDropdowns();
-}
-
-function initGenerateReportForm() {
-    const generateReportForm = document.getElementById('generateReportForm');
-    if (generateReportForm) {
-        generateReportForm.addEventListener('submit', function(e) {
+    // Handle report type change
+    const reportType = document.getElementById('reportType');
+    if (reportType) {
+        reportType.addEventListener('change', function() {
+            // Show/hide relevant form fields based on report type
+            const classField = document.getElementById('classId');
+            const studentField = document.getElementById('studentId');
+            
+            // Load classes based on report type
+            if (classField) {
+                loadClasses(this.value);
+            }
+            
+            // Load students if class is selected
+            if (studentField && classField.value) {
+                loadStudents(classField.value);
+            }
+        });
+    }
+    
+    // Handle class change
+    const classSelect = document.getElementById('classId');
+    if (classSelect) {
+        classSelect.addEventListener('change', function() {
+            const studentSelect = document.getElementById('studentId');
+            if (studentSelect && this.value) {
+                loadStudents(this.value);
+            }
+        });
+    }
+    
+    // Handle form submission
+    const reportForm = document.getElementById('generateReportForm');
+    if (reportForm) {
+        reportForm.addEventListener('submit', function(e) {
             e.preventDefault();
             generateReport(this);
         });
     }
+    
+    // Load recent reports
+    loadRecentReports();
+});
+
+// Function to load classes
+function loadClasses(reportType) {
+    const classSelect = document.getElementById('classId');
+    if (!classSelect) return;
+    
+    // Show loading state
+    classSelect.innerHTML = '<option value="">Loading classes...</option>';
+    
+    // Fetch classes from API
+    fetch('api/classes.php?report_type=' + reportType)
+        .then(response => response.json())
+        .then(data => {
+            classSelect.innerHTML = '<option value="">Select Class</option>';
+            data.forEach(classItem => {
+                const option = document.createElement('option');
+                option.value = classItem.id;
+                option.textContent = classItem.name;
+                classSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+            classSelect.innerHTML = '<option value="">Error loading classes</option>';
+        });
 }
 
-function generateReport(form) {
+// Function to load students
+function loadStudents(classId) {
+    const studentSelect = document.getElementById('studentId');
+    if (!studentSelect) return;
+    
     // Show loading state
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalBtnText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
+    studentSelect.innerHTML = '<option value="">Loading students...</option>';
     
-    // Get form data
+    // Fetch students from API
+    fetch('api/students.php?class_id=' + classId)
+        .then(response => response.json())
+        .then(data => {
+            studentSelect.innerHTML = '<option value="">All Students (Class Report)</option>';
+            data.forEach(student => {
+                const option = document.createElement('option');
+                option.value = student.id;
+                option.textContent = student.name;
+                studentSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading students:', error);
+            studentSelect.innerHTML = '<option value="">Error loading students</option>';
+        });
+}
+
+// Function to generate report
+function generateReport(form) {
     const formData = new FormData(form);
-    const reportFormat = formData.get('format');
+    const reportType = formData.get('report_type');
+    const format = formData.get('format');
     
-    // Build query string from form data
-    const params = new URLSearchParams();
-    for (const [key, value] of formData.entries()) {
-        if (value) params.append(key, value);
-    }
+    // Show loading state
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
     
-    if (reportFormat === 'online') {
-        // For online viewing, redirect to report viewer page
-        window.location.href = 'index.php?page=report_view&' + params.toString();
+    // Generate report via API
+    fetch('api/generate_report.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (format === 'online') {
+            return response.json();
     } else {
-        // For downloading, use the API endpoint
-        fetch('api/generate_report.php?' + params.toString())
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Failed to generate report');
-                    });
-                }
-                
-                // Check content type for different formats
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    // It's an error response
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Failed to generate report');
-                    });
-                }
-                
-                return response.blob();
-            })
-            .then(blob => {
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
+            return response.blob();
+        }
+    })
+    .then(data => {
+        if (format === 'online') {
+            // Redirect to report view
+            window.location.href = 'index.php?page=report_view&id=' + data.report_id;
+        } else {
+            // Download file
+            const url = window.URL.createObjectURL(data);
                 const a = document.createElement('a');
-                a.style.display = 'none';
                 a.href = url;
-                a.download = `report_${formData.get('report_type')}_${new Date().toISOString().slice(0,10)}.${reportFormat}`;
+            a.download = `${reportType}_report.${format}`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
+            a.remove();
+        }
             })
             .catch(error => {
                 console.error('Error generating report:', error);
-                alert(error.message || 'Failed to generate report. Please try again.');
+        alert('Error generating report. Please try again.');
             })
             .finally(() => {
                 // Reset button state
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnText;
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
             });
-    }
 }
 
+// Function to load recent reports
 function loadRecentReports() {
-    const reportsTableBody = document.getElementById('reportsTableBody');
-    if (!reportsTableBody) return;
+    const recentReportsTable = document.getElementById('recentReportsTable');
+    if (!recentReportsTable) return;
     
     // Show loading state
-    reportsTableBody.innerHTML = '<tr><td colspan="5" class="text-center"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading reports...</td></tr>';
+    recentReportsTable.innerHTML = '<tr><td colspan="3" class="text-center">Loading recent reports...</td></tr>';
     
-    // Fetch recent reports
-    fetch('api/get_recent_reports.php')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
+    // Fetch recent reports from API
+    fetch('api/recent_reports.php')
+        .then(response => response.json())
         .then(data => {
-            if (data.reports && data.reports.length > 0) {
-                reportsTableBody.innerHTML = '';
-                
-                data.reports.forEach(report => {
+            if (data.length === 0) {
+                recentReportsTable.innerHTML = '<tr><td colspan="3" class="text-center">No recent reports</td></tr>';
+                return;
+            }
+            
+            recentReportsTable.innerHTML = '';
+            data.forEach(report => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${report.name}</td>
-                        <td><span class="badge bg-${getReportTypeBadgeColor(report.type)}">${report.type}</span></td>
-                        <td>${formatDate(report.generated_date)}</td>
-                        <td>${report.generated_by}</td>
-                        <td>
-                            <div class="btn-group btn-group-sm">
-                                <a href="index.php?page=report_view&report_id=${report.id}" class="btn btn-outline-primary">View</a>
-                                <a href="api/download_report.php?report_id=${report.id}&format=pdf" target="_blank" class="btn btn-outline-secondary">Print</a>
-                            </div>
+                    <td>${report.date}</td>
+                    <td>
+                        <a href="index.php?page=report_view&id=${report.id}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-eye"></i> View
+                        </a>
                         </td>
                     `;
-                    reportsTableBody.appendChild(row);
+                recentReportsTable.appendChild(row);
                 });
-            } else {
-                reportsTableBody.innerHTML = '<tr><td colspan="5" class="text-center">No reports found. Generate a new report to get started.</td></tr>';
-            }
         })
         .catch(error => {
-            console.error('Error loading reports:', error);
-            reportsTableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Failed to load reports. Please try again.</td></tr>';
+            console.error('Error loading recent reports:', error);
+            recentReportsTable.innerHTML = '<tr><td colspan="3" class="text-center">Error loading reports</td></tr>';
         });
 }
 
-function initDependentDropdowns() {
-    const classSelect = document.getElementById('classId');
-    const subjectSelect = document.getElementById('subjectId');
-    const studentSelect = document.getElementById('studentId');
+// Handle quick report clicks
+document.querySelectorAll('[data-report]').forEach(element => {
+    element.addEventListener('click', function(e) {
+        e.preventDefault();
+        const reportType = this.dataset.report;
+        generateQuickReport(reportType);
+    });
+});
+
+// Function to generate quick report
+function generateQuickReport(reportType) {
+    const today = new Date();
+    let startDate, endDate;
     
-    if (classSelect) {
-        // Load classes
-        fetch('api/get_classes.php')
-            .then(response => response.ok ? response.json() : Promise.reject('Failed to load classes'))
-            .then(data => {
-                if (data.classes && data.classes.length > 0) {
-                    classSelect.innerHTML = '<option value="">All Classes</option>';
-                    data.classes.forEach(cls => {
-                        const option = document.createElement('option');
-                        option.value = cls.id;
-                        option.textContent = cls.name;
-                        classSelect.appendChild(option);
-                    });
-                }
-            })
-            .catch(error => console.error('Error loading classes:', error));
-            
-        // Update subjects and students when class changes
-        classSelect.addEventListener('change', function() {
-            const classId = this.value;
-            
-            // Update subjects dropdown
-            if (subjectSelect) {
-                subjectSelect.innerHTML = '<option value="">Loading...</option>';
-                subjectSelect.disabled = true;
-                
-                fetch(`api/get_subjects.php${classId ? '?class_id=' + classId : ''}`)
-                    .then(response => response.ok ? response.json() : Promise.reject('Failed to load subjects'))
-                    .then(data => {
-                        subjectSelect.innerHTML = '<option value="">All Subjects</option>';
-                        if (data.subjects && data.subjects.length > 0) {
-                            data.subjects.forEach(subject => {
-                                const option = document.createElement('option');
-                                option.value = subject.id;
-                                option.textContent = subject.name;
-                                subjectSelect.appendChild(option);
-                            });
-                        }
-                        subjectSelect.disabled = false;
-                    })
-                    .catch(error => {
-                        console.error('Error loading subjects:', error);
-                        subjectSelect.innerHTML = '<option value="">All Subjects</option>';
-                        subjectSelect.disabled = false;
-                    });
-            }
-            
-            // Update students dropdown
-            if (studentSelect) {
-                studentSelect.innerHTML = '<option value="">Loading...</option>';
-                studentSelect.disabled = true;
-                
-                fetch(`api/get_students.php${classId ? '?class_id=' + classId : ''}`)
-                    .then(response => response.ok ? response.json() : Promise.reject('Failed to load students'))
-                    .then(data => {
-                        studentSelect.innerHTML = '<option value="">All Students</option>';
-                        if (data.students && data.students.length > 0) {
-                            data.students.forEach(student => {
-                                const option = document.createElement('option');
-                                option.value = student.id;
-                                option.textContent = student.full_name;
-                                studentSelect.appendChild(option);
-                            });
-                        }
-                        studentSelect.disabled = false;
-                    })
-                    .catch(error => {
-                        console.error('Error loading students:', error);
-                        studentSelect.innerHTML = '<option value="">All Students</option>';
-                        studentSelect.disabled = false;
-                    });
-            }
-        });
+    switch(reportType) {
+        case 'daily_attendance':
+            startDate = endDate = today.toISOString().split('T')[0];
+            break;
+        case 'weekly_health':
+            startDate = new Date(today.setDate(today.getDate() - today.getDay())).toISOString().split('T')[0];
+            endDate = new Date(today.setDate(today.getDate() + 6)).toISOString().split('T')[0];
+            break;
+        case 'monthly_finance':
+            startDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+            break;
     }
-}
-
-// Helper functions
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString();
-}
-
-function getReportTypeBadgeColor(type) {
-    switch (type) {
-        case 'academic': return 'primary';
-        case 'attendance': return 'success';
-        case 'behavior': return 'warning';
-        case 'progress': return 'info';
-        default: return 'secondary';
-    }
+    
+    // Redirect to report generation with pre-filled parameters
+    window.location.href = `index.php?page=reports&action=generate&type=${reportType}&start_date=${startDate}&end_date=${endDate}`;
 } 

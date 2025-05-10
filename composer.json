@@ -1,0 +1,15 @@
+{
+    "name": "edutrack360/school-management",
+    "description": "A comprehensive school management system",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "phpoffice/phpspreadsheet": "^1.29",
+        "tecnickcom/tcpdf": "^6.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "EduTrack360\\": "src/"
+        }
+    }
+} 
